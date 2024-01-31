@@ -1,0 +1,62 @@
+---
+name: Build
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - 'Containerfile'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+        versions:
+          - from_version: 11
+            to_version: 12
+          - from_version: 12
+            to_version: 13
+          - from_version: 13
+            to_version: 14
+          - from_version: 14
+            to_version: 15
+          - from_version: 15
+            to_version: 16
+          
+    steps:
+      - name: Clone current repository
+        uses: actions/checkout@v3
+      
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+    
+      - name: Build using buildah
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          registry: ghcr.io
+          image: tibeer/pgupgrade
+          tags: ${{ matrix.versions['from_version'] }}to${{ matrix.versions['to_version'] }}
+          platforms: ${{ matrix.platforms }}
+          build-args: |
+            UPGRADE_FROM_VERSION=${{ matrix.versions['from_version'] }}
+            UPGRADE_TO_VERSION=${{ matrix.versions['to_version'] }}
+          containerfiles: |
+            ./Containerfile
+
+      - name: Push to ghcr.io
+        uses: redhat-actions/push-to-registry@v2
+        with:
+            image: ${{ steps.build.outputs.image }}
+            tags: ${{ steps.build.outputs.tags }}
+            registry: ghcr.io
+            username: ${{ github.repository_owner }}
+            password: ${{ github.token }}
